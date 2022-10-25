@@ -1,3 +1,7 @@
+#ifndef AT_CHECK
+#define AT_CHECK TORCH_CHECK 
+#endif
+
 #include <ATen/ATen.h>
 
 #include <cuda.h>
