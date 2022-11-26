@@ -66,7 +66,7 @@ int main(){
 	printf("time is %f ns\n", time*1e9);	 
 	
 
-	printf("QK[%d]=%d ", i, QK[45*1024+45]);
+	printf("QK[%d]=%d ", i, QK[5*T + 5], 'should equal 2*D/H = 128');
 
 
 	return 0;
