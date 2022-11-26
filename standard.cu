@@ -65,7 +65,10 @@ int main(){
 	time = (stop.tv_sec - start.tv_sec)+ (double)(stop.tv_nsec - start.tv_nsec)/1e9;
 	printf("time is %f ns\n", time*1e9);	 
 	
-
+	for (int i=0; i<T; i++) 
+		for (int j=0; j<T; j++)
+			printf("QK[%d][%d] = %d", i, j, QK[i*T+j]);
+		pirntf("\n");
 	printf("QK[%d]=%d ", i, QK[5*T + 5], 'should equal 2*D/H = 128');
 
 
