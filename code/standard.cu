@@ -6,7 +6,7 @@
 #define n 1024
 #define T 196
 #define D 384
-#define H 6
+#define H 12
 __global__ void matrixmult_Q_K(int *a, int *b, int *c){
 	int X = blockIdx.x*blockDim.x + threadIdx.x;
 	int Y = blockIdx.y*blockDim.y + threadIdx.y;
@@ -31,7 +31,6 @@ __global__ void matrixmult_QK_V(int *a, int *b, int *c){
 
 
 int main(){	
-	//H=atoi(argv[1]);
 	
     int i;
     int *Q = (int*)malloc(sizeof(int)*T*D/H);          
@@ -74,17 +73,17 @@ int main(){
 	
 	if( clock_gettime( CLOCK_REALTIME, &stop) == -1 ) { perror( "clock gettime" );}	  
 	time = (stop.tv_sec - start.tv_sec)+ (double)(stop.tv_nsec - start.tv_nsec)/1e9;
-	printf("time is %f ns\n", time*1e9);	 
+	printf("Standard attention time is %f ns\n", time*1e9);	 
 	
 	cudaMemcpy(QK, gpu_QK, sizeof(int)*T*T, cudaMemcpyDeviceToHost);
 	cudaMemcpy(QKV, gpu_QKV, sizeof(int)*T*D/H, cudaMemcpyDeviceToHost);
 
 
-
+	/*
 	printf("QK[100][100] = %d\n",QK[100*T+100]);
 	printf("should equal 2*D/H = 128\n");
 	printf("QKV[100][30] = %d\n",QKV[100*D/H+30]);
-	printf("should equal 196* 128 = 25088");
-
+	printf("should equal 196* 128 = 25088/n");
+*/
 	return 0;
 }	

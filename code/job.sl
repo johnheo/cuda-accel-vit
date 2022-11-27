@@ -11,6 +11,5 @@
 module purge
 module load nvidia-hpc-sdk
 
-./mmult 1
-./mmult 4
-./mmult 16
+
+./standard 
