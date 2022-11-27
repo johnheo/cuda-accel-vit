@@ -5,7 +5,7 @@
 #SBATCH --mem=16GB
 #SBATCH --time=1:00:00
 #SBATCH --partition=gpu 
-#SBATCH --output=gpujob.out
+#SBATCH --output=results/gpujob.out
 #SBATCH --gres=gpu:p100:1
 
 module purge
