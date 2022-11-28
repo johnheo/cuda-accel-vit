@@ -3,7 +3,11 @@ CXX = nvcc
 init:
 	module load nvidia-hpc-sdk
 
-p1: linear.cu
+std: standard.cu
+	$(CXX) $< -o $@
+	sbatch job.sl
+
+lienar: linear.cu
 	$(CXX) $< -o $@
 	sbatch job.sl
 
