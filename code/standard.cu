@@ -72,8 +72,8 @@ int main(){
 	matrixmult_QK_V<<<dimGrid_2, dimBlock_2>>>(gpu_QK, gpu_V, gpu_QKV);				
 	
 	if( clock_gettime( CLOCK_REALTIME, &stop) == -1 ) { perror( "clock gettime" );}	  
-	time = (stop.tv_sec - start.tv_sec)+ (double)(stop.tv_nsec - start.tv_nsec)/1e9;
-	printf("Standard attention time is %f ns\n", time*1e9);	 
+	time = (stop.tv_sec - start.tv_sec)+ (double)(stop.tv_nsec - start.tv_nsec);
+	printf("Standard attention time is %d ns || %.6f s \n", time, time/1e9);	 
 	
 	cudaMemcpy(QK, gpu_QK, sizeof(int)*T*T, cudaMemcpyDeviceToHost);
 	cudaMemcpy(QKV, gpu_QKV, sizeof(int)*T*D/H, cudaMemcpyDeviceToHost);
