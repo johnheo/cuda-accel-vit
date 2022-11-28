@@ -177,8 +177,12 @@ int main(int argc, char const *argv[])
     int m, n, k;
     /* Fixed seed for illustration */
     srand(3333);
-    printf("please type in m n and k\n");
+    //printf("please type in m n and k\n");
     scanf("%d %d %d", &m, &n, &k);
+    printf("manual input of matrix size");
+    m = 1024;
+    n = 1024;
+    k = 1024;
 
     // allocate memory in host RAM, h_cc is used to store CPU result
     int *h_a, *h_b, *h_c, *h_cc;
