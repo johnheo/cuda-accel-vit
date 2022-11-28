@@ -1,11 +1,12 @@
 CXX = nvcc
+DEFS = --debug
 
 standard: standard.cu
-	$(CXX) $< -o $@
+	$(CXX) $(DEFS) $< -o $@
 	sbatch job.sl
 
 linear: linear.cu
-	$(CXX) $< -o $@
+	$(CXX) $(DEFS) $< -o $@
 	sbatch job.sl
 
 init:

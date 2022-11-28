@@ -261,13 +261,15 @@ int main(int argc, char const *argv[])
     {
         for (int j = 0; j < k; ++j)
         {
-            //printf("[%d][%d]:%d == [%d][%d]:%d, ", i, j, h_cc[i*k + j], i, j, h_c[i*k + j]);
+            #if defined(DEBUG)
+            printf("[%d][%d]:%d == [%d][%d]:%d, ", i, j, h_cc[i*k + j], i, j, h_c[i*k + j]);
+            if (j == k-1) printf("\n");
+            #endif
             if(h_cc[i*k + j] != h_c[i*k + j])
             {
                 all_ok = 0;
             }
         }
-        //printf("\n");
     }
 
     // roughly compute speedup
