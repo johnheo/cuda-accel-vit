@@ -120,8 +120,7 @@ void cpu_softmax(int *attention_map, int dim) {
         int sum=0.0;
         for (int j=0; j<dim; j++) {
             // TODO: numerical error when casting back to int
-            // attention_map[i*dim+j] = (int)std::exp((float)attention_map[i*dim+j]);
-            attention_map[i*dim+j] = (int) pow(2.71, (double) attention_map[i*dim+j]);
+            attention_map[i*dim+j] = (int)std::exp((double)attention_map[i*dim+j]);
             sum += attention_map[i*dim+j];
         }
         // normalize by sum to turn into probabilities
@@ -148,16 +147,16 @@ int main(int argc, char const *argv[])
     srand(3333);
 
     // receive input parameters
-    // sscanf(argv[1], "%d", &T);
-    // sscanf(argv[2], "%d", &D);
-    // sscanf(argv[3], "%d", &H);
+    sscanf(argv[1], "%d", &T);
+    sscanf(argv[2], "%d", &D);
+    sscanf(argv[3], "%d", &H);
 
     // printf("command line input : \n (T,D) = (%d,%d) || # Heads (H) = %d\n", T, D, H);
 
-    T = 196;
-    D = 384;
-    H = 100;
-
+    // T = 196;
+    // D = 384;
+    // H = 100;
+    printf("\n=================================\n");
     printf("command line input : \n (T,D) = (%d,%d) || # Heads (H) = %d\n", T, D, H);
 
     // allocate memory in host RAM, cpu_result is used to store CPU result
@@ -187,7 +186,7 @@ int main(int argc, char const *argv[])
 
     float gpu_elapsed_time_ms, cpu_elapsed_time_ms;
     bool gpu,cpu;
-    gpu = false;
+    gpu = true;
     cpu = true;
 
     // some events to count the execution time
@@ -217,8 +216,8 @@ int main(int argc, char const *argv[])
         dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
         
         gpu_matrix_mult<<<dimGrid, dimBlock>>>(gpu_Q, gpu_K, gpu_attn, T, D/H, T);
-        gpu_softmax<<<dimGrid, dimBlock>>>(gpu_attn, T);
-        gpu_matrix_mult<<<dimGrid, dimBlock>>>(gpu_attn, gpu_V, cuda_result, T, D/H, T);
+        // gpu_softmax<<<dimGrid, dimBlock>>>(gpu_attn, T);
+        gpu_matrix_mult<<<dimGrid, dimBlock>>>(gpu_attn, gpu_V, cuda_result, T, T, D/H);
 
         // Transefr results from device to host 
         cudaMemcpy(gpu_result, cuda_result, sizeof(int)*T*D/H, cudaMemcpyDeviceToHost);
@@ -241,14 +240,14 @@ int main(int argc, char const *argv[])
         float total_cpu_time_ms = 0;
         cudaEventRecord(start, 0);
 
-        cpu_matmul(mat_Q, mat_K, cpu_attn, T, D, T);
-        cpu_softmax(cpu_attn, T);
-        // cpu_matmul(cpu_attn, mat_V, cpu_result, T, T, D);
+        cpu_matmul(mat_Q, mat_K, cpu_attn, T, D/H, T);
+        // cpu_softmax(cpu_attn, T);
+        cpu_matmul(cpu_attn, mat_V, cpu_result, T, T, D/H);
 
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&cpu_elapsed_time_ms, start, stop);
-        printf("Time elapsed on matrix multiplication of %dx%d . %dx%d on CPU: %f ms.\n\n", T, D, D, H, cpu_elapsed_time_ms);
+        printf("Time elapsed on matrix multiplication of %dx%d . %dx%d on CPU: %f ms.\n\n", T, D/H, D/H, H, cpu_elapsed_time_ms);
     }
 
     // optionally validate results computed by GPU
@@ -263,7 +262,7 @@ int main(int argc, char const *argv[])
                 printf("[%d][%d]:%d == [%d][%d]:%d, ", i, j, cpu_result[i*H + j], i, j, mat_V[i*H + j]);
                 if (j == H-1) printf("\n");
                 #endif
-                if(cpu_result[i*H + j] != mat_V[i*H + j])
+                if(cpu_result[i*H + j] != gpu_result[i*H + j])
                 {
                     all_ok = 0;
                 }
