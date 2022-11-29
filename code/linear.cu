@@ -31,7 +31,11 @@ __global__ void matrixmult_Q_KV(int *a, int *b, int *c){
 
 
 int main(){	
-	
+	float ms; // elapsed time in milliseconds
+
+    cudaEvent_t startEvent,stopEvent;
+	cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
     int i;
     int *Q = (int*)malloc(sizeof(int)*T*D/H);          
 	int *K = (int*)malloc(sizeof(int)*D/H*T);          
@@ -44,7 +48,13 @@ int main(){
 		K[i]=2;
 		V[i]=1;
 	}
-	
+		
+	struct timespec start, stop; 
+	double time;
+	if( clock_gettime( CLOCK_REALTIME, &start) == -1 ) { perror( "clock gettime" );}
+
+	cudaEventRecord(startEvent,0);
+
 	int *gpu_Q, *gpu_K, *gpu_KV, *gpu_V, *gpu_QKV;
 	cudaMalloc((void**)&gpu_Q, sizeof(int)*T*D/H); 
 	cudaMalloc((void**)&gpu_K, sizeof(int)*D/H*T);
@@ -52,27 +62,32 @@ int main(){
 	cudaMalloc((void**)&gpu_V, sizeof(int)*T*D/H);
 	cudaMalloc((void**)&gpu_QKV, sizeof(int)*T*D/H);
 		
-	struct timespec start, stop; 
-	double time;
+
   
   
 	cudaMemcpy(gpu_Q, Q, sizeof(int)*T*D/H, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_K, K, sizeof(int)*D/H*T, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_V, V, sizeof(int)*D/H*T, cudaMemcpyHostToDevice);
 	
-	dim3 dimGrid_1(4,4);
+	dim3 dimGrid_1(D/H/16,D/H/16);
 	dim3 dimBlock_1(16,16);
-	dim3 dimGrid_2(16,4);
+	dim3 dimGrid_2(T/16,D/H/16);
 	dim3 dimBlock_2(16,16);
 	
-	if( clock_gettime( CLOCK_REALTIME, &start) == -1 ) { perror( "clock gettime" );}
+
 	matrixmult_K_V<<<dimGrid_1, dimBlock_1>>>(gpu_K, gpu_V, gpu_KV);
 	
 	matrixmult_Q_KV<<<dimGrid_2, dimBlock_2>>>(gpu_Q, gpu_KV, gpu_QKV);				
 	
+	
+	cudaEventRecord(stopEvent, 0) ;
+	cudaEventSynchronize(stopEvent) ;
+	cudaEventElapsedTime(&ms, startEvent, stopEvent) ;
+	printf("Linear Time execute using cuda api(ms): %f   \n", ms);
+	
 	if( clock_gettime( CLOCK_REALTIME, &stop) == -1 ) { perror( "clock gettime" );}	  
 	time = (stop.tv_sec - start.tv_sec)+ (double)(stop.tv_nsec - start.tv_nsec)/1e9;
-	printf("Linear attention time is %f ns\n", time*1e9);	 
+	//printf("Linear attention time is %f ns\n", time*1e9);	 
 	
 	cudaMemcpy(KV, gpu_KV, sizeof(int)*D/H*D/H, cudaMemcpyDeviceToHost);
 	cudaMemcpy(QKV, gpu_QKV, sizeof(int)*T*D/H, cudaMemcpyDeviceToHost);
