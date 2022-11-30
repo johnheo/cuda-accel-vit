@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <nvToolsExt.h>
 
 #define BLOCK_SIZE 16
 #define TOKENS 196
@@ -31,7 +32,7 @@ __global__ void gpu_matrix_mult(int *a,int *b, int *c, int m, int n, int k)
     }
 }
 
-__global__ void gpu_softmax(int *attn, int dim)
+__global__ void old_gpu_softmax(int *attn, int dim)
 {
 
     int tid = threadIdx.x;
@@ -53,6 +54,40 @@ __global__ void gpu_softmax(int *attn, int dim)
     }
 }
 
+__global__ void gpu_softmax(int *attn, int *gpu_sm_out, int dim, bool parallel)
+{
+
+    int row = blockIdx.y * blockDim.y + threadIdx.y; 
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+	double temp_sum = attn[row*dim+col];
+	double temp = attn[row*dim+col];
+
+    if (row < dim && col < dim) {
+        if (parallel) {
+            for (int i=7; i >=0; i--){
+                if (col<pow(2,i)){
+                    if ((col+pow(2,i)) < dim){
+                        temp_sum += attn[row * dim + col + (int)pow(2,i)];  
+                    }
+                    attn[row * dim + col] = temp_sum;
+                }
+                if(col == 0 && i == 0)
+                    attn[row * dim] = temp_sum;
+                __syncthreads(); 
+            }
+            gpu_sm_out[row * dim + col] = temp/attn[row * dim];
+        }
+        else {
+            double local_sum = 0; 
+            for (int i = 0; i < dim ; i++)
+                local_sum += attn[row * dim + i];
+            gpu_sm_out[row * dim + col] = attn[row * dim + col]/local_sum;
+        }
+    }
+
+
+}
 
 __global__ void gpu_shared_matrix_mult(int *d_a, int *d_b, int *d_result, int n) 
 {
@@ -117,16 +152,17 @@ void cpu_matmul(int *h_a, int *h_b, int *h_result, int m, int n, int k)
 void cpu_softmax(int *attention_map, int dim) {
     for (int i=0; i<dim; i++) {
         // exponentiate logits and find sum 
-        int sum=0.0;
+        double sum=0;
         for (int j=0; j<dim; j++) {
             // TODO: numerical error when casting back to int
-            attention_map[i*dim+j] = (int)std::exp((double)attention_map[i*dim+j]);
-            sum += attention_map[i*dim+j];
+            double val = exp((double)attention_map[i*dim+j]);
+            attention_map[i*dim+j] = (int)val;
+            sum += val;
         }
         // normalize by sum to turn into probabilities
-        printf("attn[0] = %d | sum = %d",attention_map[0], sum);
+        // printf("attn[0] = %d | sum = %d",attention_map[0], sum);
         for (int j=0; j<dim; j++) {
-            attention_map[i*dim+j] /= sum;
+            attention_map[i*dim+j] = (int)((double)attention_map[i*dim+j]/sum);
         }
     }
 }
@@ -186,7 +222,7 @@ int main(int argc, char const *argv[])
 
     float gpu_elapsed_time_ms, cpu_elapsed_time_ms;
     bool gpu,cpu;
-    gpu = true;
+    gpu = false;
     cpu = true;
 
     // some events to count the execution time
@@ -198,11 +234,12 @@ int main(int argc, char const *argv[])
         // start to count execution time of GPU version
         cudaEventRecord(start, 0);
         // Allocate memory space on the device 
-        int *gpu_Q, *gpu_K, *gpu_V, *gpu_attn, *cuda_result;
+        int *gpu_Q, *gpu_K, *gpu_V, *gpu_attn, *gpu_sm_out, *cuda_result;
         cudaMalloc((void **) &gpu_Q, sizeof(int)*T*D/H);
         cudaMalloc((void **) &gpu_K, sizeof(int)*T*D/H);
         cudaMalloc((void **) &gpu_V, sizeof(int)*T*D/H);
         cudaMalloc((void **) &gpu_attn, sizeof(int)*T*T);
+        cudaMalloc((void **) &gpu_sm_out, sizeof(int)*T*T);
         cudaMalloc((void **) &cuda_result, sizeof(int)*T*D/H);
 
         // copy matrix A and B from host to device memory
@@ -211,13 +248,15 @@ int main(int argc, char const *argv[])
         cudaMemcpy(gpu_V, mat_V, sizeof(int)*T*D/H, cudaMemcpyHostToDevice);
 
         unsigned int grid_rows = (T + BLOCK_SIZE - 1) / BLOCK_SIZE;
-        unsigned int grid_cols = (D/H + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        unsigned int grid_cols = (T + BLOCK_SIZE - 1) / BLOCK_SIZE;
         dim3 dimGrid(grid_cols, grid_rows);
         dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+
+        dim3 dimGrid_last((D/H + BLOCK_SIZE - 1) / BLOCK_SIZE, grid_rows);
         
         gpu_matrix_mult<<<dimGrid, dimBlock>>>(gpu_Q, gpu_K, gpu_attn, T, D/H, T);
-        // gpu_softmax<<<dimGrid, dimBlock>>>(gpu_attn, T);
-        gpu_matrix_mult<<<dimGrid, dimBlock>>>(gpu_attn, gpu_V, cuda_result, T, T, D/H);
+        gpu_softmax<<<dimGrid, dimBlock>>>(gpu_attn, gpu_sm_out, T, false);
+        gpu_matrix_mult<<<dimGrid_last, dimBlock>>>(gpu_attn, gpu_V, cuda_result, T, T, D/H);
 
         // Transefr results from device to host 
         cudaMemcpy(gpu_result, cuda_result, sizeof(int)*T*D/H, cudaMemcpyDeviceToHost);
@@ -236,18 +275,38 @@ int main(int argc, char const *argv[])
     }
 
     // ==============================start the CPU version===============================================
+    float cpu_matmul1_ms, cpu_softmax_ms, cpu_matmul2_ms;
     if (cpu) {
-        float total_cpu_time_ms = 0;
         cudaEventRecord(start, 0);
-
         cpu_matmul(mat_Q, mat_K, cpu_attn, T, D/H, T);
-        // cpu_softmax(cpu_attn, T);
-        cpu_matmul(cpu_attn, mat_V, cpu_result, T, T, D/H);
-
         cudaEventRecord(stop, 0);
+        cudaEventElapsedTime(&cpu_matmul1_ms, start, stop);
+
+        cudaEventRecord(start, 0);
+        cpu_softmax(cpu_attn, T);
+        cudaEventRecord(stop, 0);
+        cudaEventElapsedTime(&cpu_softmax_ms, start, stop);
+
+        cudaEventRecord(start, 0);
+        cpu_matmul(cpu_attn, mat_V, cpu_result, T, T, D/H);
+        cudaEventRecord(stop, 0);
+        cudaEventElapsedTime(&cpu_matmul2_ms, start, stop);
+
         cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&cpu_elapsed_time_ms, start, stop);
-        printf("Time elapsed on matrix multiplication of %dx%d . %dx%d on CPU: %f ms.\n\n", T, D/H, D/H, H, cpu_elapsed_time_ms);
+        cpu_elapsed_time_ms = cpu_matmul1_ms + cpu_softmax_ms + cpu_matmul2_ms;
+        // cudaEventElapsedTime(&cpu_elapsed_time_ms, start, stop);
+        // printf("Time elapsed on matrix multiplication of %dx%d . %dx%d on CPU: %f ms.\n\n", T, D/H, D/H, H, cpu_elapsed_time_ms);
+        printf("Time elapsed on CPU. \n \
+                Matmul1: %.4f ms (%f%)\n \
+                Softmax: %.4f ms (%f%)\n \
+                Matmul2: %.4f ms (%f%)\n \
+                Total: %.4f ms", \
+                cpu_matmul1_ms, cpu_matmul1_ms/cpu_elapsed_time_ms, \
+                cpu_softmax_ms, cpu_softmax_ms/cpu_elapsed_time_ms, \
+                cpu_matmul2_ms, cpu_matmul2_ms/cpu_elapsed_time_ms, \
+                cpu_elapsed_time_ms
+                )
+
     }
 
     // optionally validate results computed by GPU
