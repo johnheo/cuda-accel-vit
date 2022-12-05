@@ -12,4 +12,15 @@ module purge
 module load nvidia-hpc-sdk
 
 
-./standard 
+#nsys profile --cuda-memory-usage true ./linear 800 384 6
+
+#ncu --target-processes all --kernel-id ::regex:^.*matrixMultiply.*$:1 --set full -o linear_ncu srun ./linear 800 384 6
+#ncu --target-processes all  ./linear 800 384 6
+#./go
+
+./go 50 384 6
+./go 100 384 6
+./go 200 384 6
+./go 400 384 6
+./go 800 384 6
+./go 1000 384 6
